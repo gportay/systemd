@@ -31,7 +31,7 @@ static int help(void) {
         if (r < 0)
                 return log_oom();
 
-        printf("%s attach VOLUME DATADEVICE HASHDEVICE ROOTHASH [ROOTHASHSIG]\n"
+        printf("%s attach VOLUME DATADEVICE HASHDEVICE ROOTHASH [ROOTHASHSIG] [OPTIONS]\n"
                "%s detach VOLUME\n\n"
                "Attaches or detaches an integrity protected block device.\n"
                "\nSee the %s for details.\n"
@@ -41,6 +41,44 @@ static int help(void) {
         );
 
         return 0;
+}
+
+static int parse_flags(const char *flags) {
+        _cleanup_free_ const char *copy = NULL;
+        int r;
+
+        copy = strdup(flags);
+        if (!copy)
+                return log_oom();
+
+        for (;;) {
+                _cleanup_free_ char *word = NULL;
+
+                r = extract_first_word(&copy, &word, ",", EXTRACT_DONT_COALESCE_SEPARATORS | EXTRACT_UNESCAPE_SEPARATORS);
+                if (r < 0)
+                        return log_error_errno(r, "Failed to parse options: %m");
+                if (r == 0)
+                        break;
+
+                if (streq(word, "ignore-corruption"))
+                        r |= CRYPT_ACTIVATE_IGNORE_CORRUPTION;
+                else if (streq(word, "restart-on-corruption"))
+                        r |= CRYPT_ACTIVATE_RESTART_ON_CORRUPTION;
+                else if (streq(word, "ignore-zero-blocks"))
+                        r |= CRYPT_ACTIVATE_IGNORE_ZERO_BLOCKS;
+#ifdef CRYPT_ACTIVATE_CHECK_AT_MOST_ONCE
+                else if (streq(word, "check-at-most-once"))
+                        r |= CRYPT_ACTIVATE_CHECK_AT_MOST_ONCE;
+#endif
+#ifdef CRYPT_ACTIVATE_PANIC_ON_CORRUPTION
+                else if (strcmp(word, "panic-on-corruption"))
+                        r |= CRYPT_ACTIVATE_PANIC_ON_CORRUPTION;
+#endif
+                else
+                        return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Unknown option %s.", word);
+        }
+
+        return r;
 }
 
 static int run(int argc, char *argv[]) {
@@ -58,6 +96,7 @@ static int run(int argc, char *argv[]) {
         umask(0022);
 
         if (streq(argv[1], "attach")) {
+                uint32_t flags = CRYPT_ACTIVATE_READONLY;
                 _cleanup_free_ void *m = NULL;
                 crypt_status_info status;
                 size_t l;
@@ -81,6 +120,9 @@ static int run(int argc, char *argv[]) {
                         return 0;
                 }
 
+                if (argc > 7 && !streq(argv[7], "-"))
+                        flags = parse_flags(argv[7]);
+
                 r = crypt_load(cd, CRYPT_VERITY, NULL);
                 if (r < 0)
                         return log_error_errno(r, "Failed to load verity superblock: %m");
@@ -89,7 +131,7 @@ static int run(int argc, char *argv[]) {
                 if (r < 0)
                         return log_error_errno(r, "Failed to configure data device: %m");
 
-                if (argc > 6) {
+                if (argc > 6 && !streq(argv[6], "-")) {
 #if HAVE_CRYPT_ACTIVATE_BY_SIGNED_KEY
                         _cleanup_free_ char *hash_sig = NULL;
                         size_t hash_sig_size;
@@ -105,12 +147,12 @@ static int run(int argc, char *argv[]) {
                                         return log_error_errno(r, "Failed to read root hash signature: %m");
                         }
 
-                        r = crypt_activate_by_signed_key(cd, argv[2], m, l, hash_sig, hash_sig_size, CRYPT_ACTIVATE_READONLY);
+                        r = crypt_activate_by_signed_key(cd, argv[2], m, l, hash_sig, hash_sig_size, flags);
 #else
                         return log_error_errno(SYNTHETIC_ERRNO(EOPNOTSUPP), "activation of verity device with signature %s requested, but not supported by cryptsetup due to missing crypt_activate_by_signed_key()", argv[6]);
 #endif
                 } else
-                        r = crypt_activate_by_volume_key(cd, argv[2], m, l, CRYPT_ACTIVATE_READONLY);
+                        r = crypt_activate_by_volume_key(cd, argv[2], m, l, flags);
                 if (r < 0)
                         return log_error_errno(r, "Failed to set up verity device: %m");
 

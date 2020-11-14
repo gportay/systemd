@@ -1,0 +1,219 @@
+<?xml version="1.0"?>
+<!--*-nxml-*-->
+<!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
+  "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
+<!--
+  SPDX-License-Identifier: LGPL-2.1-or-later
+
+This is based on crypttab(5).
+
+-->
+<refentry id="veritytab" conditional='HAVE_LIBCRYPTSETUP' xmlns:xi="http://www.w3.org/2001/XInclude">
+
+  <refentryinfo>
+    <title>veritytab</title>
+    <productname>systemd</productname>
+  </refentryinfo>
+
+  <refmeta>
+    <refentrytitle>veritytab</refentrytitle>
+    <manvolnum>5</manvolnum>
+  </refmeta>
+
+  <refnamediv>
+    <refname>veritytab</refname>
+    <refpurpose>Configuration for verity block devices</refpurpose>
+  </refnamediv>
+
+  <refsynopsisdiv>
+    <para><filename>/etc/veritytab</filename></para>
+  </refsynopsisdiv>
+
+  <refsect1>
+    <title>Description</title>
+
+    <para>The <filename>/etc/veritytab</filename> file describes
+    verity block devices that are set up during system boot.</para>
+
+    <para>Empty lines and lines starting with the <literal>#</literal>
+    character are ignored. Each of the remaining lines describes one
+    verity block device. Fields are delimited by white space.</para>
+
+    <para>Each line is in the form<programlisting><replaceable>volume-name</replaceable> <replaceable>data-device</replaceable> <replaceable>hash-device</replaceable> <replaceable>roothash</replaceable> <replaceable>options</replaceable></programlisting>
+    The first four fields are mandatory, the remaining one is optional.</para>
+
+    <para>The first field contains the name of the resulting verity volume; its block device is set up
+    below <filename>/dev/mapper/</filename>.</para>
+
+    <para>The second field contains a path to the underlying block data device, or a specification of a block device via
+    <literal>UUID=</literal> followed by the UUID.</para>
+
+    <para>The third field contains a path to the underlying block hash device, or a specification of a block device via
+    <literal>UUID=</literal> followed by the UUID.</para>
+
+    <para>The fourth field is the <literal>roothash</literal> in hexadecimal.</para>
+
+    <para>The fifth field, if present, is a comma-delimited list of options. The following options are
+    recognized:</para>
+
+    <variablelist class='fstab-options'>
+
+      <varlistentry>
+        <term><option>no-superblock=</option></term>
+
+        <listitem><para>Use dm-verity without permanent on-disk superblock. See <citerefentry
+        project='die-net'><refentrytitle>veritysetup</refentrytitle><manvolnum>8</manvolnum></citerefentry>.</para>
+        </listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>hash-offset=bytes</option></term>
+
+        <listitem><para>Offset of hash area/superblock on <literal>hash-device</literal>. Value must be aligned
+        to disk sector offset.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>ignore-corruption</option></term>
+        <term><option>restart-on-corruption</option></term>
+        <term><option>panic-on-corruption</option></term>
+
+        <listitem><para>Defines what to do if data integrity problem is detected (data corruption). Without these
+        options kernel fails the IO operation with I/O error. With <literal>--ignore-corruption</literal> option the
+        corruption is only logged. With <literal>--restart-on-corruption</literal> or
+        <literal>--panic-on-corruption</literal> the kernel is restarted (panicked) immediately.
+
+        (You have to provide way how to avoid restart loops.)</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>ignore-zero-blocks</option></term>
+
+        <listitem><para>Instruct kernel to not verify blocks that are expected to contain zeroes and always directly
+        return zeroes instead.
+
+        WARNING: Use this option only in very specific cases. This option is available since Linux kernel version 4.5.
+        </para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>check-at-most-once</option></term>
+
+        <listitem><para>Instruct kernel to verify blocks only the first time they are read from the data device, rather
+        than every time.
+
+        WARNING: It provides a reduced level of security because only offline tampering of the data device's content
+        will be detected, not online tampering. This option is available since Linux kernel version 4.17.
+        </para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>root-hash-signature=</option></term>
+
+        <listitem><para>Path to roothash signature file used to verify the root hash (in kernel). This feature requires
+        Linux kernel version 5.4 or more recent.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>format=number</option></term>
+
+        <listitem><para>Specifies the hash version type. Format type 0 is original Chrome OS version. Format type 1 is
+        current version.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>data-block-size=bytes</option></term>
+
+        <listitem><para>Used block size for the data device. (Note kernel supports only page-size as maximum
+        here.)</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>hash-block-size=bytes</option></term>
+
+        <listitem><para>Used block size for the hash device. (Note kernel supports only page-size as maximum
+        here.)</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>data-blocks=blocks</option></term>
+
+        <listitem><para>Size of data device used in verification. If not specified, the whole device is
+        used.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>noauto</option></term>
+
+        <listitem><para>This device will not be added to <filename>veritysetup.target</filename>.
+        This means that it will not be automatically unlocked on boot, unless something else pulls
+        it in. In particular, if the device is used for a mount point, it'll be unlocked
+        automatically during boot, unless the mount point itself is also disabled with
+        <option>noauto</option>.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>nofail</option></term>
+
+        <listitem><para>This device will not be a hard dependency of
+        <filename>veritysetup.target</filename>. It'll still be pulled in and started, but the system
+        will not wait for the device to show up and be unlocked, and boot will not fail if this is
+        unsuccessful. Note that other units that depend on the unlocked device may still fail. In
+        particular, if the device is used for a mount point, the mount point itself also needs to
+        have the <option>nofail</option> option, or the boot will fail if the device is not unlocked
+        successfully.</para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>x-systemd.device-timeout=</option></term>
+
+        <listitem><para>Specifies how long systemd should wait for a device to show up
+        before giving up on the entry. The argument is a time in seconds or explicitly
+        specified units of
+        <literal>s</literal>,
+        <literal>min</literal>,
+        <literal>h</literal>,
+        <literal>ms</literal>.
+        </para></listitem>
+      </varlistentry>
+
+      <varlistentry>
+        <term><option>x-initrd.attach</option></term>
+
+        <listitem><para>Setup this verity block device in the initramfs, similarly to
+        <citerefentry><refentrytitle>systemd.mount</refentrytitle><manvolnum>5</manvolnum></citerefentry>
+        units marked with <option>x-initrd.mount</option>.</para>
+
+        <para>Although it's not necessary to mark the mount entry for the root file system with
+        <option>x-initrd.mount</option>, <option>x-initrd.attach</option> is still recommended with
+        the verity block device containing the root file system as otherwise systemd will
+        attempt to detach the device during the regular system shutdown while it's still in
+        use. With this option the device will still be detached but later after the root file
+        system is unmounted.</para>
+
+        <para>All other verity block devices that contain file systems mounted in the initramfs
+        should use this option.</para>
+        </listitem>
+      </varlistentry>
+
+    </variablelist>
+
+    <para>At early boot and when the system manager configuration is
+    reloaded, this file is translated into native systemd units by
+    <citerefentry><refentrytitle>systemd-veritysetup-generator</refentrytitle><manvolnum>8</manvolnum></citerefentry>.</para>
+  </refsect1>
+
+  <refsect1>
+    <title>See Also</title>
+    <para>
+      <citerefentry><refentrytitle>systemd</refentrytitle><manvolnum>1</manvolnum></citerefentry>,
+      <citerefentry><refentrytitle>systemd-veritysetup@.service</refentrytitle><manvolnum>8</manvolnum></citerefentry>,
+      <citerefentry><refentrytitle>systemd-veritysetup-generator</refentrytitle><manvolnum>8</manvolnum></citerefentry>,
+      <citerefentry project='man-pages'><refentrytitle>fstab</refentrytitle><manvolnum>5</manvolnum></citerefentry>,
+      <citerefentry project='die-net'><refentrytitle>veritysetup</refentrytitle><manvolnum>8</manvolnum></citerefentry>,
+      <citerefentry project='man-pages'><refentrytitle>mkswap</refentrytitle><manvolnum>8</manvolnum></citerefentry>,
+      <citerefentry project='man-pages'><refentrytitle>mke2fs</refentrytitle><manvolnum>8</manvolnum></citerefentry>
+    </para>
+  </refsect1>
+
+</refentry>

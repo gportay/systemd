@@ -66,10 +66,10 @@ static int parse_argv(int argc, char *argv[]) {
         };
 
         static const struct option options[] = {
-                { "help",          no_argument,       NULL, 'h'               },
-                { "version",       no_argument,       NULL, ARG_VERSION       },
-                { "hash-offset",   required_argument, NULL, ARG_HASH_OFFSET   },
-                { "no-superblock", required_argument, NULL, ARG_NO_SUPERBLOCK },
+                { "help",                  no_argument,       NULL, 'h'               },
+                { "version",               no_argument,       NULL, ARG_VERSION       },
+                { "hash-offset",           required_argument, NULL, ARG_HASH_OFFSET   },
+                { "no-superblock",         required_argument, NULL, ARG_NO_SUPERBLOCK },
                 { "ignore-corruption",     required_argument, NULL, ARG_IGNORE_CORRUPTION     },
                 { "restart-on-corruption", required_argument, NULL, ARG_RESTART_ON_CORRUPTION },
                 { "panic-on-corruption",   required_argument, NULL, ARG_PANIC_ON_CORRUPTION   },

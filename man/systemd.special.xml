@@ -187,6 +187,13 @@
           </listitem>
         </varlistentry>
         <varlistentry>
+          <term><filename>veritysetup.target</filename></term>
+          <listitem>
+            <para>A target that pulls in setup services for all
+            verity block devices.</para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
           <term><filename>dbus.service</filename></term>
           <listitem>
             <para>A special unit for the D-Bus bus daemon. As soon as
@@ -549,6 +556,15 @@
             <para>Similar to <filename>cryptsetup.target</filename>, but for encrypted
             devices which are accessed over the network. It is used for
             <citerefentry><refentrytitle>crypttab</refentrytitle><manvolnum>8</manvolnum></citerefentry>
+            entries marked with <option>_netdev</option>.</para>
+          </listitem>
+        </varlistentry>
+        <varlistentry>
+          <term><filename>remote-veritysetup.target</filename></term>
+          <listitem>
+            <para>Similar to <filename>veritysetup.target</filename>, but for verity
+            devices which are accessed over the network. It is used for
+            <citerefentry><refentrytitle>veritytab</refentrytitle><manvolnum>8</manvolnum></citerefentry>
             entries marked with <option>_netdev</option>.</para>
           </listitem>
         </varlistentry>

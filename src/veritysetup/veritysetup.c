@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 
+#include <getopt.h>
 #include <errno.h>
 #include <stdio.h>
 #include <sys/stat.h>
@@ -10,6 +11,7 @@
 #include "hexdecoct.h"
 #include "log.h"
 #include "main-func.h"
+#include "parse-util.h"
 #include "path-util.h"
 #include "pretty-print.h"
 #include "string-util.h"
@@ -18,6 +20,13 @@
 static char *arg_root_hash = NULL;
 static char *arg_data_what = NULL;
 static char *arg_hash_what = NULL;
+static uint64_t arg_hash_offset = 0;
+static bool arg_no_superblock = false;
+static bool arg_ignore_corruption = false;
+static bool arg_restart_on_corruption = false;
+static bool arg_panic_on_corruption = false;
+static bool arg_ignore_zero_blocks = false;
+static bool arg_check_at_most_once = false;
 
 STATIC_DESTRUCTOR_REGISTER(arg_root_hash, freep);
 STATIC_DESTRUCTOR_REGISTER(arg_data_what, freep);
@@ -43,42 +52,139 @@ static int help(void) {
         return 0;
 }
 
-static int parse_flags(const char *flags) {
-        _cleanup_free_ const char *copy = NULL;
-        int r;
+static int parse_argv(int argc, char *argv[]) {
+        enum {
+                ARG_VERSION = 0x100,
+                ARG_HASH_OFFSET,
+                ARG_NO_SUPERBLOCK,
+                ARG_IGNORE_CORRUPTION,
+                ARG_RESTART_ON_CORRUPTION,
+                ARG_PANIC_ON_CORRUPTION,
+                ARG_IGNORE_ZERO_BLOCKS,
+                ARG_CHECK_AT_MOST_ONCE,
+                ARG_ROOT_HASH_SIGNATURE,
+        };
 
-        copy = strdup(flags);
-        if (!copy)
-                return log_oom();
+        static const struct option options[] = {
+                { "help",          no_argument,       NULL, 'h'               },
+                { "version",       no_argument,       NULL, ARG_VERSION       },
+                { "hash-offset",   required_argument, NULL, ARG_HASH_OFFSET   },
+                { "no-superblock", required_argument, NULL, ARG_NO_SUPERBLOCK },
+                { "ignore-corruption",     required_argument, NULL, ARG_IGNORE_CORRUPTION     },
+                { "restart-on-corruption", required_argument, NULL, ARG_RESTART_ON_CORRUPTION },
+                { "panic-on-corruption",   required_argument, NULL, ARG_PANIC_ON_CORRUPTION   },
+                { "ignore-zero-blocks",    required_argument, NULL, ARG_IGNORE_ZERO_BLOCKS    },
+                { "check-at-most-once",    required_argument, NULL, ARG_CHECK_AT_MOST_ONCE    },
+                { "root-hash-signature",   required_argument, NULL, ARG_ROOT_HASH_SIGNATURE   },
+        };
 
-        for (;;) {
-                _cleanup_free_ char *word = NULL;
+        int r, c;
 
-                r = extract_first_word(&copy, &word, ",", EXTRACT_DONT_COALESCE_SEPARATORS | EXTRACT_UNESCAPE_SEPARATORS);
-                if (r < 0)
-                        return log_error_errno(r, "Failed to parse options: %m");
-                if (r == 0)
+        assert(argc >= 0);
+        assert(argv);
+
+        while ((c = getopt_long(argc, argv, "h", options, NULL)) >= 0)
+                switch (c) {
+
+                case 'h':
+                        return help();
+
+                case ARG_VERSION:
+                        return version();
+
+                case ARG_HASH_OFFSET:
+                        r = safe_atou64(optarg, &arg_hash_offset);
+                        if (r < 0)
+                                return log_error_errno(r, "Failed to parse --hash-offset: %s", optarg);
+
                         break;
 
-                if (streq(word, "ignore-corruption"))
-                        r |= CRYPT_ACTIVATE_IGNORE_CORRUPTION;
-                else if (streq(word, "restart-on-corruption"))
-                        r |= CRYPT_ACTIVATE_RESTART_ON_CORRUPTION;
-                else if (streq(word, "ignore-zero-blocks"))
-                        r |= CRYPT_ACTIVATE_IGNORE_ZERO_BLOCKS;
-#ifdef CRYPT_ACTIVATE_CHECK_AT_MOST_ONCE
-                else if (streq(word, "check-at-most-once"))
-                        r |= CRYPT_ACTIVATE_CHECK_AT_MOST_ONCE;
-#endif
-#ifdef CRYPT_ACTIVATE_PANIC_ON_CORRUPTION
-                else if (strcmp(word, "panic-on-corruption"))
-                        r |= CRYPT_ACTIVATE_PANIC_ON_CORRUPTION;
-#endif
-                else
-                        return log_error_errno(SYNTHETIC_ERRNO(EINVAL), "Unknown option %s.", word);
-        }
+                case ARG_NO_SUPERBLOCK:
+                        if (optarg) {
+                                r = parse_boolean(optarg);
+                                if (r < 0)
+                                        return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
+                                                               "Failed to parse --no-superblock= argument.");
 
-        return r;
+                                arg_no_superblock = r;
+                        } else
+                                arg_no_superblock = true;
+
+                        break;
+
+                case ARG_IGNORE_CORRUPTION:
+                        if (optarg) {
+                                r = parse_boolean(optarg);
+                                if (r < 0)
+                                        return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
+                                                               "Failed to parse --ignore-corruption= argument.");
+
+                                arg_ignore_corruption = r;
+                        } else
+                                arg_ignore_corruption = true;
+
+                        break;
+
+                case ARG_RESTART_ON_CORRUPTION:
+                        if (optarg) {
+                                r = parse_boolean(optarg);
+                                if (r < 0)
+                                        return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
+                                                               "Failed to parse --restart-on-corruption= argument.");
+
+                                arg_restart_on_corruption = r;
+                        } else
+                                arg_restart_on_corruption = true;
+
+                        break;
+
+                case ARG_PANIC_ON_CORRUPTION:
+                        if (optarg) {
+                                r = parse_boolean(optarg);
+                                if (r < 0)
+                                        return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
+                                                               "Failed to parse --panic-on-corruption= argument.");
+
+                                arg_panic_on_corruption = r;
+                        } else
+                                arg_panic_on_corruption = true;
+
+                        break;
+
+                case ARG_IGNORE_ZERO_BLOCKS:
+                        if (optarg) {
+                                r = parse_boolean(optarg);
+                                if (r < 0)
+                                        return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
+                                                               "Failed to parse --ignore-zero-blocks= argument.");
+
+                                arg_ignore_zero_blocks = r;
+                        } else
+                                arg_ignore_zero_blocks = true;
+
+                        break;
+
+                case ARG_CHECK_AT_MOST_ONCE:
+                        if (optarg) {
+                                r = parse_boolean(optarg);
+                                if (r < 0)
+                                        return log_error_errno(SYNTHETIC_ERRNO(EINVAL),
+                                                               "Failed to parse --check-at-most-once= argument.");
+
+                                arg_check_at_most_once = r;
+                        } else
+                                arg_check_at_most_once = true;
+
+                        break;
+
+                case '?':
+                        return -EINVAL;
+
+                default:
+                        assert_not_reached("Unhandled option code.");
+                }
+
+        return 1;
 }
 
 static int run(int argc, char *argv[]) {
@@ -94,6 +200,10 @@ static int run(int argc, char *argv[]) {
         log_setup_service();
 
         umask(0022);
+
+        r = parse_argv(argc, argv);
+        if (r <= 0)
+                return r;
 
         if (streq(argv[1], "attach")) {
                 uint32_t flags = CRYPT_ACTIVATE_READONLY;
@@ -120,8 +230,20 @@ static int run(int argc, char *argv[]) {
                         return 0;
                 }
 
-                if (argc > 7 && !streq(argv[7], "-"))
-                        flags = parse_flags(argv[7]);
+                if (arg_ignore_corruption)
+                        flags |= CRYPT_ACTIVATE_IGNORE_CORRUPTION;
+                if (arg_restart_on_corruption)
+                       flags |= CRYPT_ACTIVATE_RESTART_ON_CORRUPTION;
+                if (arg_ignore_zero_blocks)
+                        flags |= CRYPT_ACTIVATE_IGNORE_ZERO_BLOCKS;
+#ifdef CRYPT_ACTIVATE_CHECK_AT_MOST_ONCE
+                if (arg_check_at_most_once)
+                        flags |= CRYPT_ACTIVATE_CHECK_AT_MOST_ONCE;
+#endif
+#ifdef CRYPT_ACTIVATE_PANIC_ON_CORRUPTION
+                if (arg_panic_on_corruption)
+                        flags |= CRYPT_ACTIVATE_PANIC_ON_CORRUPTION;
+#endif
 
                 r = crypt_load(cd, CRYPT_VERITY, NULL);
                 if (r < 0)
